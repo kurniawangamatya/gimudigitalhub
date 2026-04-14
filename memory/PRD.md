@@ -42,6 +42,10 @@ Landing page dan platform e-commerce untuk produk digital kedokteran dan kedokte
 - Change password from profile page
 - Forgot password flow (request reset token)
 - Reset password flow (set new password via token)
+- Admin dashboard with stats overview (products, users, orders, revenue)
+- Admin CRUD: create, edit, delete products with form dialog
+- Admin product table with category filters and search
+- Admin-only route protection (role-based access)
 
 ## Test Results
 - Backend: 100% (13/13 tests passing)
