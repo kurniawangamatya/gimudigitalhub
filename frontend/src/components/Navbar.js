@@ -11,7 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../components/ui/dropdown-menu';
-import { ShoppingCart, User, Menu, X, BookOpen, LogOut, Package, UserCircle } from 'lucide-react';
+import { ShoppingCart, User, Menu, X, BookOpen, LogOut, Package, UserCircle, LayoutDashboard } from 'lucide-react';
 
 export default function Navbar() {
   const { user, logout } = useAuth();
@@ -82,6 +82,11 @@ export default function Navbar() {
                     <p className="text-xs text-muted-foreground">{user.email}</p>
                   </div>
                   <DropdownMenuSeparator />
+                  {user.role === 'admin' && (
+                    <DropdownMenuItem onClick={() => navigate('/admin')} data-testid="admin-link">
+                      <LayoutDashboard className="w-4 h-4 mr-2" /> Admin Dashboard
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem onClick={() => navigate('/profile')} data-testid="profile-link">
                     <UserCircle className="w-4 h-4 mr-2" /> Profil Saya
                   </DropdownMenuItem>
@@ -125,6 +130,9 @@ export default function Navbar() {
               <Link to="/cart" className="block text-sm font-medium text-[#1E2320]" onClick={() => setMobileOpen(false)}>Keranjang ({cartCount})</Link>
               <Link to="/profile" className="block text-sm font-medium text-[#1E2320]" onClick={() => setMobileOpen(false)}>Profil Saya</Link>
               <Link to="/orders" className="block text-sm font-medium text-[#1E2320]" onClick={() => setMobileOpen(false)}>Pesanan Saya</Link>
+              {user.role === 'admin' && (
+                <Link to="/admin" className="block text-sm font-medium text-[#143D2E]" onClick={() => setMobileOpen(false)}>Admin Dashboard</Link>
+              )}
               <button className="text-sm font-medium text-red-600" onClick={() => { handleLogout(); setMobileOpen(false); }}>Keluar</button>
             </>
           ) : (

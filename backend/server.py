@@ -130,6 +130,30 @@ class ResetPasswordRequest(BaseModel):
     token: str
     new_password: str
 
+class ProductCreateRequest(BaseModel):
+    title: str
+    description: str
+    price: float
+    category: str
+    image_url: str = ""
+    features: List[str] = []
+    badge: str = ""
+
+class ProductUpdateRequest(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    price: Optional[float] = None
+    category: Optional[str] = None
+    image_url: Optional[str] = None
+    features: Optional[List[str]] = None
+    badge: Optional[str] = None
+
+async def require_admin(request: Request) -> dict:
+    user = await get_current_user(request)
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user
+
 def set_auth_cookies(response: Response, access_token: str, refresh_token: str):
     response.set_cookie(key="access_token", value=access_token, httponly=True, secure=False, samesite="lax", max_age=900, path="/")
     response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, secure=False, samesite="lax", max_age=604800, path="/")
@@ -476,6 +500,91 @@ async def get_orders(request: Request):
     user = await get_current_user(request)
     orders = await db.orders.find({"user_id": user["_id"]}, {"_id": 0}).to_list(100)
     return orders
+
+# ============ ADMIN ROUTES ============
+@api_router.get("/admin/stats")
+async def admin_stats(request: Request):
+    await require_admin(request)
+    total_products = await db.products.count_documents({})
+    total_users = await db.users.count_documents({})
+    total_orders = await db.orders.count_documents({})
+    total_revenue = 0.0
+    orders = await db.orders.find({}, {"_id": 0, "amount": 1}).to_list(1000)
+    for o in orders:
+        total_revenue += o.get("amount", 0)
+    category_counts = {}
+    for cat in ["ebook", "video", "template", "quiz"]:
+        category_counts[cat] = await db.products.count_documents({"category": cat})
+    return {
+        "total_products": total_products,
+        "total_users": total_users,
+        "total_orders": total_orders,
+        "total_revenue": round(total_revenue, 2),
+        "category_counts": category_counts
+    }
+
+@api_router.post("/admin/products")
+async def admin_create_product(req: ProductCreateRequest, request: Request):
+    await require_admin(request)
+    product_id = req.title.lower().replace(" ", "-").replace(".", "")[:50] + "-" + str(uuid.uuid4())[:8]
+    product_doc = {
+        "id": product_id,
+        "title": req.title,
+        "description": req.description,
+        "price": round(req.price, 2),
+        "category": req.category,
+        "image_url": req.image_url,
+        "features": req.features,
+        "rating": 0.0,
+        "reviews_count": 0,
+        "badge": req.badge,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.products.insert_one(product_doc)
+    created = await db.products.find_one({"id": product_id}, {"_id": 0})
+    return created
+
+@api_router.put("/admin/products/{product_id}")
+async def admin_update_product(product_id: str, req: ProductUpdateRequest, request: Request):
+    await require_admin(request)
+    existing = await db.products.find_one({"id": product_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Product not found")
+    update_data = {}
+    if req.title is not None:
+        update_data["title"] = req.title
+    if req.description is not None:
+        update_data["description"] = req.description
+    if req.price is not None:
+        update_data["price"] = round(req.price, 2)
+    if req.category is not None:
+        update_data["category"] = req.category
+    if req.image_url is not None:
+        update_data["image_url"] = req.image_url
+    if req.features is not None:
+        update_data["features"] = req.features
+    if req.badge is not None:
+        update_data["badge"] = req.badge
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.products.update_one({"id": product_id}, {"$set": update_data})
+    updated = await db.products.find_one({"id": product_id}, {"_id": 0})
+    return updated
+
+@api_router.delete("/admin/products/{product_id}")
+async def admin_delete_product(product_id: str, request: Request):
+    await require_admin(request)
+    result = await db.products.delete_one({"id": product_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return {"message": "Product deleted"}
+
+@api_router.get("/admin/users")
+async def admin_get_users(request: Request):
+    await require_admin(request)
+    users = await db.users.find({}, {"_id": 0, "password_hash": 0}).to_list(1000)
+    return users
 
 # ============ SEED DATA ============
 SEED_PRODUCTS = [

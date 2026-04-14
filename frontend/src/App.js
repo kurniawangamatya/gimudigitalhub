@@ -16,6 +16,7 @@ import OrdersPage from './pages/OrdersPage';
 import ProfilePage from './pages/ProfilePage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
+import AdminDashboard from './pages/AdminDashboard';
 
 function AppContent() {
   return (
@@ -37,6 +38,7 @@ function AppContent() {
               <Route path="/checkout/success" element={<CheckoutSuccessPage />} />
               <Route path="/orders" element={<OrdersPage />} />
               <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/admin" element={<AdminDashboard />} />
             </Routes>
             <Footer />
           </>
