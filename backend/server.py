@@ -113,6 +113,23 @@ class CartItemRequest(BaseModel):
 class CheckoutRequest(BaseModel):
     origin_url: str
 
+class UpdateProfileRequest(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    specialization: Optional[str] = None
+    institution: Optional[str] = None
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
 def set_auth_cookies(response: Response, access_token: str, refresh_token: str):
     response.set_cookie(key="access_token", value=access_token, httponly=True, secure=False, samesite="lax", max_age=900, path="/")
     response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, secure=False, samesite="lax", max_age=604800, path="/")
@@ -197,6 +214,89 @@ async def refresh_token(request: Request, response: Response):
         return {"message": "Token refreshed"}
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+# ============ PROFILE ROUTES ============
+@api_router.get("/profile")
+async def get_profile(request: Request):
+    user = await get_current_user(request)
+    return {
+        "id": user["_id"],
+        "email": user.get("email", ""),
+        "name": user.get("name", ""),
+        "role": user.get("role", "user"),
+        "phone": user.get("phone", ""),
+        "specialization": user.get("specialization", ""),
+        "institution": user.get("institution", ""),
+        "created_at": user.get("created_at", ""),
+    }
+
+@api_router.put("/profile")
+async def update_profile(req: UpdateProfileRequest, request: Request):
+    user = await get_current_user(request)
+    update_data = {}
+    if req.name is not None:
+        update_data["name"] = req.name
+    if req.phone is not None:
+        update_data["phone"] = req.phone
+    if req.specialization is not None:
+        update_data["specialization"] = req.specialization
+    if req.institution is not None:
+        update_data["institution"] = req.institution
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.users.update_one({"_id": ObjectId(user["_id"])}, {"$set": update_data})
+    updated = await db.users.find_one({"_id": ObjectId(user["_id"])}, {"_id": 0, "password_hash": 0})
+    return updated
+
+@api_router.post("/profile/change-password")
+async def change_password(req: ChangePasswordRequest, request: Request):
+    user_with_id = await get_current_user(request)
+    full_user = await db.users.find_one({"_id": ObjectId(user_with_id["_id"])})
+    if not verify_password(req.current_password, full_user["password_hash"]):
+        raise HTTPException(status_code=400, detail="Password saat ini salah")
+    if len(req.new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password baru minimal 6 karakter")
+    new_hash = hash_password(req.new_password)
+    await db.users.update_one({"_id": ObjectId(user_with_id["_id"])}, {"$set": {"password_hash": new_hash, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    return {"message": "Password berhasil diubah"}
+
+# ============ FORGOT/RESET PASSWORD ============
+@api_router.post("/auth/forgot-password")
+async def forgot_password(req: ForgotPasswordRequest):
+    email = req.email.lower().strip()
+    user = await db.users.find_one({"email": email})
+    if not user:
+        return {"message": "Jika email terdaftar, link reset password telah dikirim"}
+    token = secrets.token_urlsafe(32)
+    await db.password_reset_tokens.insert_one({
+        "token": token,
+        "user_id": str(user["_id"]),
+        "email": email,
+        "expires_at": datetime.now(timezone.utc) + timedelta(hours=1),
+        "used": False,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+    logger.info(f"Password reset token for {email}: {token}")
+    logger.info(f"Reset link: /reset-password?token={token}")
+    return {"message": "Jika email terdaftar, link reset password telah dikirim", "token": token}
+
+@api_router.post("/auth/reset-password")
+async def reset_password(req: ResetPasswordRequest):
+    if len(req.new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password baru minimal 6 karakter")
+    token_doc = await db.password_reset_tokens.find_one({"token": req.token, "used": False})
+    if not token_doc:
+        raise HTTPException(status_code=400, detail="Token tidak valid atau sudah digunakan")
+    expires_at = token_doc["expires_at"]
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if datetime.now(timezone.utc) > expires_at:
+        raise HTTPException(status_code=400, detail="Token sudah kadaluarsa")
+    new_hash = hash_password(req.new_password)
+    await db.users.update_one({"_id": ObjectId(token_doc["user_id"])}, {"$set": {"password_hash": new_hash}})
+    await db.password_reset_tokens.update_one({"token": req.token}, {"$set": {"used": True}})
+    return {"message": "Password berhasil direset"}
 
 # ============ PRODUCT ROUTES ============
 @api_router.get("/products")
@@ -531,6 +631,8 @@ async def startup():
     await db.login_attempts.create_index("identifier")
     await db.products.create_index("category")
     await db.products.create_index("id", unique=True)
+    await db.password_reset_tokens.create_index("expires_at", expireAfterSeconds=0)
+    await db.password_reset_tokens.create_index("token")
     await seed_admin()
     await seed_products()
     # Write test credentials
@@ -542,7 +644,9 @@ async def startup():
         f.write(f"## Auth Endpoints\n- POST /api/auth/register\n- POST /api/auth/login\n- POST /api/auth/logout\n- GET /api/auth/me\n- POST /api/auth/refresh\n\n")
         f.write(f"## Product Endpoints\n- GET /api/products\n- GET /api/products/{{id}}\n\n")
         f.write(f"## Cart Endpoints\n- GET /api/cart\n- POST /api/cart\n- DELETE /api/cart/{{product_id}}\n- DELETE /api/cart\n\n")
-        f.write(f"## Checkout Endpoints\n- POST /api/checkout/create-session\n- GET /api/checkout/status/{{session_id}}\n")
+        f.write(f"## Checkout Endpoints\n- POST /api/checkout/create-session\n- GET /api/checkout/status/{{session_id}}\n\n")
+        f.write(f"## Profile Endpoints\n- GET /api/profile\n- PUT /api/profile\n- POST /api/profile/change-password\n\n")
+        f.write(f"## Password Reset Endpoints\n- POST /api/auth/forgot-password\n- POST /api/auth/reset-password\n")
 
 app.include_router(api_router)
 
