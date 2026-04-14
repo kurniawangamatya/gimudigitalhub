@@ -1,0 +1,95 @@
+{
+  "theme": "light",
+  "archetype": "1 (Organic & Earthy)",
+  "typography": {
+    "heading_font": "Outfit",
+    "body_font": "Manrope",
+    "scale": {
+      "h1": "text-4xl sm:text-5xl lg:text-6xl tracking-tight font-light",
+      "h2": "text-2xl sm:text-3xl lg:text-4xl tracking-tight font-medium",
+      "h3": "text-xl sm:text-2xl font-medium",
+      "body": "text-base leading-relaxed text-muted-foreground",
+      "small": "text-sm uppercase tracking-[0.2em] font-bold"
+    }
+  },
+  "colors": {
+    "background": "#FBFBF9",
+    "foreground": "#1E2320",
+    "primary": "#143D2E",
+    "primary_foreground": "#FFFFFF",
+    "secondary": "#8FA998",
+    "secondary_foreground": "#143D2E",
+    "accent": "#F0F2ED",
+    "accent_foreground": "#143D2E",
+    "surface": "#FFFFFF",
+    "border": "#E5E7E2",
+    "muted": "#F0F2ED",
+    "muted_foreground": "#6C7A70"
+  },
+  "spacing_and_layout": {
+    "generous_padding": "p-8 md:p-12 lg:p-24",
+    "bento_grid": "grid-cols-1 md:grid-cols-8 lg:grid-cols-12 gap-8 lg:gap-12",
+    "dashboard_grid": "grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6",
+    "card_padding": "p-6 md:p-8"
+  },
+  "surfaces": {
+    "header": "backdrop-blur-xl bg-white/70 border-b border-[#E5E7E2] shadow-sm",
+    "cards": "bg-white border border-[#E5E7E2] rounded-2xl shadow-sm hover:-translate-y-1 hover:shadow-lg transition-all duration-300",
+    "glass": "backdrop-blur-xl bg-white/70 border border-white/40 shadow-sm rounded-2xl",
+    "hero_overlay": "bg-gradient-to-r from-[#143D2E]/80 via-[#143D2E]/40 to-transparent"
+  },
+  "components": {
+    "navigation": "Sticky header (z-50) using crystal glass surface. Brand on left, navigation links center, Login/Cart buttons right. Do not hide desktop links behind a hamburger menu.",
+    "hero": "Bento layout or asymmetrical split. Left side: Text and CTA. Right side: Image with hero_overlay. Do not center everything.",
+    "product_catalog": "Use standard grid (cols-1 sm:cols-2 lg:cols-3) with generous gaps. Sidebar for filtering (categories, price). Cards should have crisp borders and subtle nested radii.",
+    "buttons": "Rounded-full for primary CTA (px-8 py-3 text-sm font-semibold). Background: Primary, Text: Primary Foreground. Hover must be explicitly defined (e.g., hover:bg-[#143D2E]/90).",
+    "testimonials": "Editorial ribbon marquee style using react-fast-marquee. Low contrast, wide spacing (gap-24), serif or elegant sans-serif, muted backgrounds.",
+    "checkout": "Use customized Shadcn form components (Input, Select). Clean layout, right column for order summary."
+  },
+  "media": {
+    "hero_image": {
+      "url": "https://images.unsplash.com/photo-1758691463620-188ca7c1a04f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzV8MHwxfHNlYXJjaHwzfHxsYXB0b3AlMjBtZWRpY2FsJTIwZGVza3xlbnwwfHx8fDE3NzYxOTQ3Njl8MA&ixlib=rb-4.1.0&q=85",
+      "description": "Doctor consulting on laptop",
+      "category": "Hero Section Background"
+    },
+    "category_ebooks": {
+      "url": "https://images.unsplash.com/photo-1676313496173-e3b325353087?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxODl8MHwxfHNlYXJjaHwxfHxtZWRpY2FsJTIwdGV4dGJvb2tzfGVufDB8fHx8MTc3NjE5NDc2OXww&ixlib=rb-4.1.0&q=85",
+      "description": "Medical books and stethoscope",
+      "category": "Product Category: E-books"
+    },
+    "category_video": {
+      "url": "https://images.unsplash.com/photo-1666886573264-38075cc56104?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzNDR8MHwxfHNlYXJjaHwyfHxtZWRpY2FsJTIwc3R1ZGVudCUyMHN0dWR5aW5nJTIwdGFibGV0fGVufDB8fHx8MTc3NjE5NDc1NHww&ixlib=rb-4.1.0&q=85",
+      "description": "Close up hands on laptop",
+      "category": "Product Category: Video Courses"
+    },
+    "category_dentistry": {
+      "url": "https://images.unsplash.com/photo-1619691249147-c5689d88016b?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDN8MHwxfHNlYXJjaHw0fHxkZW50aXN0JTIwdXNpbmclMjBkaWdpdGFsJTIwdGFibGV0fGVufDB8fHx8MTc3NjE5NDc1NHww&ixlib=rb-4.1.0&q=85",
+      "description": "Dentist using tablet",
+      "category": "Product Category: Dentistry"
+    },
+    "testimonial_bg": {
+      "url": "https://images.unsplash.com/photo-1666214280429-d3985e2ef0b4?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Nzh8MHwxfHNlYXJjaHwzfHxkb2N0b3IlMjBzdHVkeWluZ3xlbnwwfHx8fDE3NzYxOTQ3NzB8MA&ixlib=rb-4.1.0&q=85",
+      "description": "Group of doctors looking at screen",
+      "category": "Testimonial Section Background"
+    }
+  },
+  "icons": {
+    "library": "lucide-react",
+    "stroke_width": "1.5"
+  },
+  "motion": {
+    "hover_state": "transition-all duration-200 ease-in-out",
+    "marquee": "Use react-fast-marquee for editorial ribbon with slow drift"
+  },
+  "instructions_to_main_agent": [
+    "Build a hybrid fullstack app using React, Tailwind CSS, and Shadcn UI components.",
+    "Follow the Archetype 1 (Organic & Earthy) using the exact hex codes provided. Do NOT default to Vercel/Stripe stark black and white.",
+    "Implement the Layout with generous spacing (e.g., p-8, py-24). Avoid cramped, standard bootstrap-like spacing.",
+    "Use 'Outfit' font for headings and 'Manrope' for body. Update tailwind.config.js to include these fonts.",
+    "Include data-testid attributes for ALL interactive elements (buttons, links, inputs, cards) with kebab-case role-based names (e.g., 'add-to-cart-button', 'category-filter').",
+    "Ensure header uses glassmorphism and is sticky, but content underneath should have top padding to avoid overlap.",
+    "For product cards, use the 'cards' surface style. They must look clean, have accessible contrast, and clear CTA.",
+    "Never use pure transparent backgrounds for text-overlays. Use the specified 'hero_overlay' or glassmorphism.",
+    "Add react-fast-marquee to dependencies if implementing the testimonial ribbon."
+  ]
+}
