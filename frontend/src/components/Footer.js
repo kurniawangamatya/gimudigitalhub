@@ -24,10 +24,10 @@ export default function Footer() {
           <div>
             <h4 className="font-heading font-medium text-sm uppercase tracking-[0.2em] mb-4 text-white/80">{t('footer_products')}</h4>
             <ul className="space-y-3">
-              <li><Link to="/products?category=ebook" className="text-sm text-white/60 hover:text-white transition-colors">E-Book</Link></li>
-              <li><Link to="/products?category=video" className="text-sm text-white/60 hover:text-white transition-colors">Video Kursus</Link></li>
-              <li><Link to="/products?category=template" className="text-sm text-white/60 hover:text-white transition-colors">Template</Link></li>
-              <li><Link to="/products?category=quiz" className="text-sm text-white/60 hover:text-white transition-colors">Bank Soal</Link></li>
+              <li><Link to="/products?category=ebook" className="text-sm text-white/60 hover:text-white transition-colors">{t('cat_label_ebook')}</Link></li>
+              <li><Link to="/products?category=video" className="text-sm text-white/60 hover:text-white transition-colors">{t('cat_label_video')}</Link></li>
+              <li><Link to="/products?category=template" className="text-sm text-white/60 hover:text-white transition-colors">{t('cat_label_template')}</Link></li>
+              <li><Link to="/products?category=quiz" className="text-sm text-white/60 hover:text-white transition-colors">{t('cat_label_quiz')}</Link></li>
             </ul>
           </div>
 

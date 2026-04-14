@@ -51,6 +51,7 @@ Landing page dan platform e-commerce untuk produk digital kedokteran dan kedokte
 - Manajemen user admin: tabel pengguna, ubah role (user/admin), ban/unban user
 - Banned user tidak bisa login (403)
 - Tab Produk dan Pengguna di admin dashboard
+- Multi-language support (ID/EN) dengan toggle di navbar, localStorage persistence
 
 ## Test Results
 - Backend: 100% (13/13 tests passing)
