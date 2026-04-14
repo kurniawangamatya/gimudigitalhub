@@ -48,6 +48,9 @@ Landing page dan platform e-commerce untuk produk digital kedokteran dan kedokte
 - Admin-only route protection (role-based access)
 - Email notifikasi via Brevo: welcome email, reset password email, konfirmasi pembelian
 - Admin test email button di dashboard
+- Manajemen user admin: tabel pengguna, ubah role (user/admin), ban/unban user
+- Banned user tidak bisa login (403)
+- Tab Produk dan Pengguna di admin dashboard
 
 ## Test Results
 - Backend: 100% (13/13 tests passing)

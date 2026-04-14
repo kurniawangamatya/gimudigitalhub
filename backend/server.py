@@ -626,6 +626,7 @@ async def admin_get_users(request: Request):
     users = await db.users.find({}, {"password_hash": 0}).to_list(1000)
     for u in users:
         u["_id"] = str(u["_id"])
+        u["banned"] = u.get("banned", False)
     return users
 
 @api_router.put("/admin/users/{user_id}/role")
