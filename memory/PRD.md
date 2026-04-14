@@ -38,6 +38,10 @@ Landing page dan platform e-commerce untuk produk digital kedokteran dan kedokte
 - Admin user seeding
 - Responsive design with Outfit/Manrope fonts
 - Organic & Earthy theme (#143D2E primary)
+- User profile page (name, phone, specialization, institution)
+- Change password from profile page
+- Forgot password flow (request reset token)
+- Reset password flow (set new password via token)
 
 ## Test Results
 - Backend: 100% (13/13 tests passing)
