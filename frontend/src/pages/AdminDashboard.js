@@ -36,7 +36,7 @@ import {
 import { toast } from 'sonner';
 import {
   Plus, Pencil, Trash2, MoreVertical, Package, Users, ShoppingCart,
-  DollarSign, BookOpen, Video, FileText, HelpCircle, ArrowLeft, X, Search
+  DollarSign, BookOpen, Video, FileText, HelpCircle, ArrowLeft, X, Search, Mail, Send
 } from 'lucide-react';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -248,6 +248,20 @@ export default function AdminDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
 
+  const [sendingTestEmail, setSendingTestEmail] = useState(false);
+
+  const handleTestEmail = async () => {
+    setSendingTestEmail(true);
+    try {
+      const { data } = await axios.post(`${API}/admin/test-email`, {}, { withCredentials: true });
+      toast.success(`${data.message} ke ${data.sent_to}`);
+    } catch (err) {
+      toast.error(formatApiError(err.response?.data?.detail));
+    } finally {
+      setSendingTestEmail(false);
+    }
+  };
+
   // Dialogs
   const [formOpen, setFormOpen] = useState(false);
   const [editProduct, setEditProduct] = useState(null);
@@ -325,6 +339,30 @@ export default function AdminDashboard() {
             <StatCard icon={DollarSign} label="Total Revenue" value={`$${stats.total_revenue.toFixed(2)}`} color="bg-emerald-500" />
           </div>
         )}
+
+        {/* Email Notification Status */}
+        <div className="bg-white rounded-2xl border border-[#E5E7E2] shadow-sm p-5 mb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4" data-testid="email-config-card">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-blue-500 flex items-center justify-center">
+              <Mail className="w-4 h-4 text-white" strokeWidth={1.5} />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-[#1E2320]">Email Notifikasi Aktif</p>
+              <p className="text-xs text-[#6C7A70]">Brevo (Sendinblue) &mdash; Welcome, Reset Password, Konfirmasi Pembelian</p>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="rounded-full text-xs border-[#E5E7E2] text-[#143D2E]"
+            onClick={handleTestEmail}
+            disabled={sendingTestEmail}
+            data-testid="test-email-button"
+          >
+            <Send className="w-3.5 h-3.5 mr-1.5" strokeWidth={1.5} />
+            {sendingTestEmail ? 'Mengirim...' : 'Kirim Test Email'}
+          </Button>
+        </div>
 
         {/* Filters */}
         <div className="bg-white rounded-2xl border border-[#E5E7E2] shadow-sm overflow-hidden">

@@ -28,7 +28,7 @@ export default function ForgotPasswordPage() {
     setError('');
     setLoading(true);
     try {
-      const { data } = await axios.post(`${API}/auth/forgot-password`, { email });
+      const { data } = await axios.post(`${API}/auth/forgot-password`, { email, origin_url: window.location.origin });
       setSent(true);
       if (data.token) setResetToken(data.token);
     } catch (err) {

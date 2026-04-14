@@ -20,6 +20,9 @@ from typing import List, Optional, Dict
 from emergentintegrations.payments.stripe.checkout import (
     StripeCheckout, CheckoutSessionResponse, CheckoutStatusResponse, CheckoutSessionRequest
 )
+from email_service import (
+    send_email, welcome_email_html, reset_password_email_html, purchase_confirmation_email_html
+)
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
@@ -178,7 +181,14 @@ async def register(req: RegisterRequest, response: Response):
     access_token = create_access_token(user_id, email)
     refresh_token = create_refresh_token(user_id)
     set_auth_cookies(response, access_token, refresh_token)
+    # Send welcome email (fire-and-forget)
+    import asyncio
+    asyncio.ensure_future(send_email(email, req.name, "Selamat Datang di Gimu Digital Hub!", welcome_email_html(req.name)))
     return {"id": user_id, "email": email, "name": req.name, "role": "user"}
+
+class ForgotPasswordWithOrigin(BaseModel):
+    email: str
+    origin_url: Optional[str] = None
 
 @api_router.post("/auth/login")
 async def login(req: LoginRequest, request: Request, response: Response):
@@ -287,7 +297,7 @@ async def change_password(req: ChangePasswordRequest, request: Request):
 
 # ============ FORGOT/RESET PASSWORD ============
 @api_router.post("/auth/forgot-password")
-async def forgot_password(req: ForgotPasswordRequest):
+async def forgot_password(req: ForgotPasswordWithOrigin):
     email = req.email.lower().strip()
     user = await db.users.find_one({"email": email})
     if not user:
@@ -301,8 +311,15 @@ async def forgot_password(req: ForgotPasswordRequest):
         "used": False,
         "created_at": datetime.now(timezone.utc).isoformat()
     })
+    # Build reset link
+    origin = req.origin_url.rstrip("/") if req.origin_url else ""
+    reset_link = f"{origin}/reset-password?token={token}" if origin else f"/reset-password?token={token}"
     logger.info(f"Password reset token for {email}: {token}")
-    logger.info(f"Reset link: /reset-password?token={token}")
+    logger.info(f"Reset link: {reset_link}")
+    # Send reset email
+    user_name = user.get("name", email)
+    import asyncio
+    asyncio.ensure_future(send_email(email, user_name, "Reset Password - Gimu Digital Hub", reset_password_email_html(user_name, reset_link)))
     return {"message": "Jika email terdaftar, link reset password telah dikirim", "token": token}
 
 @api_router.post("/auth/reset-password")
@@ -457,8 +474,9 @@ async def get_checkout_status(session_id: str, request: Request):
 
     if status.payment_status == "paid" and transaction.get("payment_status") != "paid":
         await db.cart.delete_many({"user_id": user["_id"]})
+        order_id = str(uuid.uuid4())
         await db.orders.insert_one({
-            "id": str(uuid.uuid4()),
+            "id": order_id,
             "user_id": user["_id"],
             "user_email": user["email"],
             "product_ids": transaction.get("product_ids", []),
@@ -468,6 +486,19 @@ async def get_checkout_status(session_id: str, request: Request):
             "status": "completed",
             "created_at": datetime.now(timezone.utc).isoformat()
         })
+        # Send purchase confirmation email
+        product_names = []
+        for pid in transaction.get("product_ids", []):
+            p = await db.products.find_one({"id": pid}, {"_id": 0, "title": 1})
+            if p:
+                product_names.append(p["title"])
+        user_name = user.get("name", user.get("email", ""))
+        import asyncio
+        asyncio.ensure_future(send_email(
+            user["email"], user_name,
+            "Konfirmasi Pembelian - Gimu Digital Hub",
+            purchase_confirmation_email_html(user_name, order_id, transaction.get("amount", 0), product_names)
+        ))
 
     updated = await db.payment_transactions.find_one({"session_id": session_id}, {"_id": 0})
     return updated
@@ -585,6 +616,19 @@ async def admin_get_users(request: Request):
     await require_admin(request)
     users = await db.users.find({}, {"_id": 0, "password_hash": 0}).to_list(1000)
     return users
+
+@api_router.post("/admin/test-email")
+async def admin_test_email(request: Request):
+    user = await require_admin(request)
+    success = await send_email(
+        user["email"],
+        user.get("name", "Admin"),
+        "Test Email - Gimu Digital Hub",
+        "<div style='font-family:Arial,sans-serif;padding:24px;'><h2>Test Email Berhasil!</h2><p>Email notifikasi Gimu Digital Hub sudah terkonfigurasi dengan benar.</p></div>"
+    )
+    if success:
+        return {"message": "Test email berhasil dikirim", "sent_to": user["email"]}
+    return {"message": "Gagal mengirim email. Periksa konfigurasi Brevo.", "sent_to": user["email"]}
 
 # ============ SEED DATA ============
 SEED_PRODUCTS = [
