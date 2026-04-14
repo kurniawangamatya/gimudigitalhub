@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
+import { LangProvider } from './context/LangContext';
 import { Toaster } from './components/ui/sonner';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
@@ -51,12 +52,14 @@ function AppContent() {
 function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <CartProvider>
-          <AppContent />
-          <Toaster position="bottom-right" />
-        </CartProvider>
-      </AuthProvider>
+      <LangProvider>
+        <AuthProvider>
+          <CartProvider>
+            <AppContent />
+            <Toaster position="bottom-right" />
+          </CartProvider>
+        </AuthProvider>
+      </LangProvider>
     </BrowserRouter>
   );
 }

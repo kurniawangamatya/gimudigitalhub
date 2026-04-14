@@ -5,6 +5,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { BookOpen, Eye, EyeOff } from 'lucide-react';
+import { useLang } from '../context/LangContext';
 
 function formatApiErrorDetail(detail) {
   if (detail == null) return 'Terjadi kesalahan. Silakan coba lagi.';
@@ -17,6 +18,7 @@ function formatApiErrorDetail(detail) {
 export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const { t } = useLang();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
@@ -47,8 +49,8 @@ export default function LoginPage() {
             </div>
             <span className="font-heading font-semibold text-xl text-[#1E2320]">Gimu Digital Hub</span>
           </Link>
-          <h1 className="font-heading text-2xl font-medium text-[#1E2320]">Selamat Datang Kembali</h1>
-          <p className="text-sm text-[#6C7A70] mt-1">Masuk ke akun Anda</p>
+          <h1 className="font-heading text-2xl font-medium text-[#1E2320]">{t('auth_welcome_back')}</h1>
+          <p className="text-sm text-[#6C7A70] mt-1">{t('auth_login_desc')}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="bg-white rounded-2xl p-6 border border-[#E5E7E2] shadow-sm space-y-4">
@@ -56,7 +58,7 @@ export default function LoginPage() {
             <div className="bg-red-50 text-red-600 text-sm p-3 rounded-lg" data-testid="login-error">{error}</div>
           )}
           <div>
-            <Label htmlFor="email" className="text-sm text-[#1E2320]">Email</Label>
+            <Label htmlFor="email" className="text-sm text-[#1E2320]">{t('auth_email')}</Label>
             <Input
               id="email"
               type="email"
@@ -69,7 +71,7 @@ export default function LoginPage() {
             />
           </div>
           <div>
-            <Label htmlFor="password" className="text-sm text-[#1E2320]">Password</Label>
+            <Label htmlFor="password" className="text-sm text-[#1E2320]">{t('auth_password')}</Label>
             <div className="relative mt-1.5">
               <Input
                 id="password"
@@ -96,18 +98,18 @@ export default function LoginPage() {
             disabled={loading}
             data-testid="login-submit-button"
           >
-            {loading ? 'Masuk...' : 'Masuk'}
+            {loading ? t('auth_logging_in') : t('auth_login_btn')}
           </Button>
           <div className="text-center">
             <Link to="/forgot-password" className="text-xs text-[#6C7A70] hover:text-[#143D2E] transition-colors" data-testid="forgot-password-link">
-              Lupa password?
+              {t('auth_forgot')}
             </Link>
           </div>
         </form>
 
         <p className="text-center text-sm text-[#6C7A70] mt-6">
-          Belum punya akun?{' '}
-          <Link to="/register" className="text-[#143D2E] font-medium hover:underline" data-testid="go-to-register">Daftar sekarang</Link>
+          {t('auth_no_account')}{' '}
+          <Link to="/register" className="text-[#143D2E] font-medium hover:underline" data-testid="go-to-register">{t('auth_register_now')}</Link>
         </p>
       </div>
     </div>

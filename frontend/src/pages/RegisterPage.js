@@ -5,6 +5,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { BookOpen, Eye, EyeOff } from 'lucide-react';
+import { useLang } from '../context/LangContext';
 
 function formatApiErrorDetail(detail) {
   if (detail == null) return 'Terjadi kesalahan. Silakan coba lagi.';
@@ -17,6 +18,7 @@ function formatApiErrorDetail(detail) {
 export default function RegisterPage() {
   const { register } = useAuth();
   const navigate = useNavigate();
+  const { t } = useLang();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -27,7 +29,7 @@ export default function RegisterPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    if (password.length < 6) { setError('Password minimal 6 karakter'); return; }
+    if (password.length < 6) { setError(t('auth_pass_min')); return; }
     setLoading(true);
     try {
       await register(name, email, password);
@@ -49,8 +51,8 @@ export default function RegisterPage() {
             </div>
             <span className="font-heading font-semibold text-xl text-[#1E2320]">Gimu Digital Hub</span>
           </Link>
-          <h1 className="font-heading text-2xl font-medium text-[#1E2320]">Buat Akun Baru</h1>
-          <p className="text-sm text-[#6C7A70] mt-1">Mulai akses produk digital medis terbaik</p>
+          <h1 className="font-heading text-2xl font-medium text-[#1E2320]">{t('auth_create_account')}</h1>
+          <p className="text-sm text-[#6C7A70] mt-1">{t('auth_register_desc')}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="bg-white rounded-2xl p-6 border border-[#E5E7E2] shadow-sm space-y-4">
@@ -58,7 +60,7 @@ export default function RegisterPage() {
             <div className="bg-red-50 text-red-600 text-sm p-3 rounded-lg" data-testid="register-error">{error}</div>
           )}
           <div>
-            <Label htmlFor="name" className="text-sm text-[#1E2320]">Nama Lengkap</Label>
+            <Label htmlFor="name" className="text-sm text-[#1E2320]">{t('auth_name')}</Label>
             <Input
               id="name"
               type="text"
@@ -111,13 +113,13 @@ export default function RegisterPage() {
             disabled={loading}
             data-testid="register-submit-button"
           >
-            {loading ? 'Mendaftar...' : 'Daftar'}
+            {loading ? t('auth_registering') : t('auth_register_btn')}
           </Button>
         </form>
 
         <p className="text-center text-sm text-[#6C7A70] mt-6">
-          Sudah punya akun?{' '}
-          <Link to="/login" className="text-[#143D2E] font-medium hover:underline" data-testid="go-to-login">Masuk di sini</Link>
+          {t('auth_has_account')}{' '}
+          <Link to="/login" className="text-[#143D2E] font-medium hover:underline" data-testid="go-to-login">{t('auth_login_here')}</Link>
         </p>
       </div>
     </div>

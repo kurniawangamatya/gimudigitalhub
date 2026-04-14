@@ -1,8 +1,10 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { BookOpen, Instagram, Mail, MapPin } from 'lucide-react';
+import { useLang } from '../context/LangContext';
 
 export default function Footer() {
+  const { t } = useLang();
   return (
     <footer className="bg-[#143D2E] text-white" data-testid="footer">
       <div className="max-w-7xl mx-auto px-6 md:px-8 py-16">
@@ -15,12 +17,12 @@ export default function Footer() {
               <span className="font-heading font-semibold text-lg">Gimu Digital Hub</span>
             </div>
             <p className="text-sm text-white/60 leading-relaxed">
-              Platform digital terpercaya untuk produk edukasi kedokteran dan kedokteran gigi.
+              {t('footer_desc')}
             </p>
           </div>
 
           <div>
-            <h4 className="font-heading font-medium text-sm uppercase tracking-[0.2em] mb-4 text-white/80">Produk</h4>
+            <h4 className="font-heading font-medium text-sm uppercase tracking-[0.2em] mb-4 text-white/80">{t('footer_products')}</h4>
             <ul className="space-y-3">
               <li><Link to="/products?category=ebook" className="text-sm text-white/60 hover:text-white transition-colors">E-Book</Link></li>
               <li><Link to="/products?category=video" className="text-sm text-white/60 hover:text-white transition-colors">Video Kursus</Link></li>
@@ -30,16 +32,16 @@ export default function Footer() {
           </div>
 
           <div>
-            <h4 className="font-heading font-medium text-sm uppercase tracking-[0.2em] mb-4 text-white/80">Informasi</h4>
+            <h4 className="font-heading font-medium text-sm uppercase tracking-[0.2em] mb-4 text-white/80">{t('footer_info')}</h4>
             <ul className="space-y-3">
-              <li><a href="/#about" className="text-sm text-white/60 hover:text-white transition-colors">Tentang Kami</a></li>
-              <li><a href="/#testimonials" className="text-sm text-white/60 hover:text-white transition-colors">Testimoni</a></li>
-              <li><a href="/#faq" className="text-sm text-white/60 hover:text-white transition-colors">FAQ</a></li>
+              <li><a href="/#about" className="text-sm text-white/60 hover:text-white transition-colors">{t('footer_about')}</a></li>
+              <li><a href="/#testimonials" className="text-sm text-white/60 hover:text-white transition-colors">{t('nav_testimonials')}</a></li>
+              <li><a href="/#faq" className="text-sm text-white/60 hover:text-white transition-colors">{t('footer_faq')}</a></li>
             </ul>
           </div>
 
           <div>
-            <h4 className="font-heading font-medium text-sm uppercase tracking-[0.2em] mb-4 text-white/80">Kontak</h4>
+            <h4 className="font-heading font-medium text-sm uppercase tracking-[0.2em] mb-4 text-white/80">{t('footer_contact')}</h4>
             <ul className="space-y-3">
               <li className="flex items-center gap-2 text-sm text-white/60">
                 <Mail className="w-4 h-4" strokeWidth={1.5} /> info@gimudigitalhub.com
@@ -55,7 +57,7 @@ export default function Footer() {
         </div>
 
         <div className="border-t border-white/10 mt-12 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
-          <p className="text-sm text-white/40">&copy; {new Date().getFullYear()} Gimu Digital Hub. All rights reserved.</p>
+          <p className="text-sm text-white/40">&copy; {new Date().getFullYear()} Gimu Digital Hub. {t('footer_rights')}</p>
           <div className="flex gap-6">
             <a href="#" className="text-xs text-white/40 hover:text-white/60 transition-colors">Privacy Policy</a>
             <a href="#" className="text-xs text-white/40 hover:text-white/60 transition-colors">Terms of Service</a>

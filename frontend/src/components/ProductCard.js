@@ -5,6 +5,7 @@ import { Badge } from '../components/ui/badge';
 import { ShoppingCart, Star } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+import { useLang } from '../context/LangContext';
 import { toast } from 'sonner';
 
 const categoryLabels = {
@@ -18,6 +19,7 @@ export default function ProductCard({ product }) {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { addToCart } = useCart();
+  const { t } = useLang();
 
   const handleAddToCart = async (e) => {
     e.stopPropagation();
@@ -27,9 +29,9 @@ export default function ProductCard({ product }) {
     }
     try {
       await addToCart(product.id);
-      toast.success('Ditambahkan ke keranjang!');
+      toast.success(t('cart_added'));
     } catch {
-      toast.error('Gagal menambahkan ke keranjang');
+      toast.error(t('cart_add_fail'));
     }
   };
 
@@ -79,7 +81,7 @@ export default function ProductCard({ product }) {
             data-testid={`add-to-cart-${product.id}`}
           >
             <ShoppingCart className="w-3.5 h-3.5 mr-1.5" strokeWidth={1.5} />
-            Tambah
+            {t('products_add_cart')}
           </Button>
         </div>
       </div>

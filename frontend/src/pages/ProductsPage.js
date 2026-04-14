@@ -5,16 +5,9 @@ import ProductCard from '../components/ProductCard';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Search, BookOpen, Video, FileText, HelpCircle, LayoutGrid } from 'lucide-react';
+import { useLang } from '../context/LangContext';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
-
-const categoryFilters = [
-  { key: 'all', label: 'Semua', icon: LayoutGrid },
-  { key: 'ebook', label: 'E-Book', icon: BookOpen },
-  { key: 'video', label: 'Video', icon: Video },
-  { key: 'template', label: 'Template', icon: FileText },
-  { key: 'quiz', label: 'Bank Soal', icon: HelpCircle },
-];
 
 export default function ProductsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -22,6 +15,15 @@ export default function ProductsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const activeCategory = searchParams.get('category') || 'all';
+  const { t } = useLang();
+
+  const categoryFilters = [
+    { key: 'all', label: t('products_all'), icon: LayoutGrid },
+    { key: 'ebook', label: t('cat_label_ebook'), icon: BookOpen },
+    { key: 'video', label: 'Video', icon: Video },
+    { key: 'template', label: t('cat_label_template'), icon: FileText },
+    { key: 'quiz', label: t('cat_label_quiz'), icon: HelpCircle },
+  ];
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -55,9 +57,9 @@ export default function ProductsPage() {
       <div className="max-w-7xl mx-auto px-6 md:px-8">
         <div className="mb-10">
           <h1 className="font-heading text-3xl sm:text-4xl tracking-tight font-medium text-[#1E2320] mb-2" data-testid="products-title">
-            Katalog Produk
+            {t('products_title')}
           </h1>
-          <p className="text-base text-[#6C7A70]">Temukan produk digital terbaik untuk pengembangan profesional Anda</p>
+          <p className="text-base text-[#6C7A70]">{t('products_desc')}</p>
         </div>
 
         {/* Filters */}
@@ -83,7 +85,7 @@ export default function ProductsPage() {
           <div className="relative md:ml-auto">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#6C7A70]" strokeWidth={1.5} />
             <Input
-              placeholder="Cari produk..."
+              placeholder={t('products_search')}
               className="pl-9 w-full md:w-64 rounded-full border-[#E5E7E2] bg-white"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -108,7 +110,7 @@ export default function ProductsPage() {
           </div>
         ) : products.length === 0 ? (
           <div className="text-center py-20" data-testid="no-products">
-            <p className="text-lg text-[#6C7A70]">Tidak ada produk ditemukan</p>
+            <p className="text-lg text-[#6C7A70]">{t('products_none')}</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6" data-testid="products-grid">

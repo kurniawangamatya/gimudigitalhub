@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+import { useLang } from '../context/LangContext';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import {
@@ -11,11 +12,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../components/ui/dropdown-menu';
-import { ShoppingCart, User, Menu, X, BookOpen, LogOut, Package, UserCircle, LayoutDashboard } from 'lucide-react';
+import { ShoppingCart, User, Menu, X, BookOpen, LogOut, Package, UserCircle, LayoutDashboard, Globe } from 'lucide-react';
 
 export default function Navbar() {
   const { user, logout } = useAuth();
   const { cartCount } = useCart();
+  const { lang, toggleLang, t } = useLang();
   const navigate = useNavigate();
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -51,13 +53,17 @@ export default function Navbar() {
         </Link>
 
         <nav className="hidden md:flex items-center gap-8">
-          <Link to="/" className="text-sm font-medium text-[#6C7A70] hover:text-[#143D2E] transition-colors" data-testid="nav-home">Beranda</Link>
-          <Link to="/products" className="text-sm font-medium text-[#6C7A70] hover:text-[#143D2E] transition-colors" data-testid="nav-products">Produk</Link>
-          <a href="/#categories" className="text-sm font-medium text-[#6C7A70] hover:text-[#143D2E] transition-colors" data-testid="nav-categories">Kategori</a>
-          <a href="/#testimonials" className="text-sm font-medium text-[#6C7A70] hover:text-[#143D2E] transition-colors" data-testid="nav-testimonials">Testimoni</a>
+          <Link to="/" className="text-sm font-medium text-[#6C7A70] hover:text-[#143D2E] transition-colors" data-testid="nav-home">{t('nav_home')}</Link>
+          <Link to="/products" className="text-sm font-medium text-[#6C7A70] hover:text-[#143D2E] transition-colors" data-testid="nav-products">{t('nav_products')}</Link>
+          <a href="/#categories" className="text-sm font-medium text-[#6C7A70] hover:text-[#143D2E] transition-colors" data-testid="nav-categories">{t('nav_categories')}</a>
+          <a href="/#testimonials" className="text-sm font-medium text-[#6C7A70] hover:text-[#143D2E] transition-colors" data-testid="nav-testimonials">{t('nav_testimonials')}</a>
         </nav>
 
         <div className="hidden md:flex items-center gap-3">
+          <button onClick={toggleLang} className="flex items-center gap-1 text-xs font-medium text-[#6C7A70] hover:text-[#143D2E] transition-colors px-2 py-1 rounded-full border border-[#E5E7E2] hover:border-[#143D2E]/30" data-testid="lang-toggle">
+            <Globe className="w-3.5 h-3.5" strokeWidth={1.5} />
+            {lang === 'id' ? 'EN' : 'ID'}
+          </button>
           {user ? (
             <>
               <Link to="/cart" className="relative" data-testid="cart-button">
@@ -84,18 +90,18 @@ export default function Navbar() {
                   <DropdownMenuSeparator />
                   {user.role === 'admin' && (
                     <DropdownMenuItem onClick={() => navigate('/admin')} data-testid="admin-link">
-                      <LayoutDashboard className="w-4 h-4 mr-2" /> Admin Dashboard
+                      <LayoutDashboard className="w-4 h-4 mr-2" /> {t('nav_admin')}
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuItem onClick={() => navigate('/profile')} data-testid="profile-link">
-                    <UserCircle className="w-4 h-4 mr-2" /> Profil Saya
+                    <UserCircle className="w-4 h-4 mr-2" /> {t('nav_profile')}
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate('/orders')} data-testid="orders-link">
-                    <Package className="w-4 h-4 mr-2" /> Pesanan Saya
+                    <Package className="w-4 h-4 mr-2" /> {t('nav_orders')}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleLogout} data-testid="logout-button">
-                    <LogOut className="w-4 h-4 mr-2" /> Keluar
+                    <LogOut className="w-4 h-4 mr-2" /> {t('nav_logout')}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -103,10 +109,10 @@ export default function Navbar() {
           ) : (
             <>
               <Button variant="ghost" className="text-sm text-[#143D2E]" onClick={() => navigate('/login')} data-testid="login-button">
-                Masuk
+                {t('nav_login')}
               </Button>
               <Button className="text-sm rounded-full px-6 bg-[#143D2E] hover:bg-[#143D2E]/90 text-white" onClick={() => navigate('/register')} data-testid="register-button">
-                Daftar
+                {t('nav_register')}
               </Button>
             </>
           )}
@@ -123,22 +129,25 @@ export default function Navbar() {
 
       {mobileOpen && (
         <div className="md:hidden bg-white/95 backdrop-blur-xl border-t border-[#E5E7E2] px-6 py-4 space-y-3">
-          <Link to="/" className="block text-sm font-medium text-[#1E2320]" onClick={() => setMobileOpen(false)}>Beranda</Link>
-          <Link to="/products" className="block text-sm font-medium text-[#1E2320]" onClick={() => setMobileOpen(false)}>Produk</Link>
+          <button onClick={() => { toggleLang(); }} className="flex items-center gap-1 text-xs font-medium text-[#6C7A70] px-2 py-1 rounded-full border border-[#E5E7E2] w-fit">
+            <Globe className="w-3.5 h-3.5" strokeWidth={1.5} /> {lang === 'id' ? 'English' : 'Bahasa Indonesia'}
+          </button>
+          <Link to="/" className="block text-sm font-medium text-[#1E2320]" onClick={() => setMobileOpen(false)}>{t('nav_home')}</Link>
+          <Link to="/products" className="block text-sm font-medium text-[#1E2320]" onClick={() => setMobileOpen(false)}>{t('nav_products')}</Link>
           {user ? (
             <>
-              <Link to="/cart" className="block text-sm font-medium text-[#1E2320]" onClick={() => setMobileOpen(false)}>Keranjang ({cartCount})</Link>
-              <Link to="/profile" className="block text-sm font-medium text-[#1E2320]" onClick={() => setMobileOpen(false)}>Profil Saya</Link>
-              <Link to="/orders" className="block text-sm font-medium text-[#1E2320]" onClick={() => setMobileOpen(false)}>Pesanan Saya</Link>
+              <Link to="/cart" className="block text-sm font-medium text-[#1E2320]" onClick={() => setMobileOpen(false)}>{t('nav_cart')} ({cartCount})</Link>
+              <Link to="/profile" className="block text-sm font-medium text-[#1E2320]" onClick={() => setMobileOpen(false)}>{t('nav_profile')}</Link>
+              <Link to="/orders" className="block text-sm font-medium text-[#1E2320]" onClick={() => setMobileOpen(false)}>{t('nav_orders')}</Link>
               {user.role === 'admin' && (
-                <Link to="/admin" className="block text-sm font-medium text-[#143D2E]" onClick={() => setMobileOpen(false)}>Admin Dashboard</Link>
+                <Link to="/admin" className="block text-sm font-medium text-[#143D2E]" onClick={() => setMobileOpen(false)}>{t('nav_admin')}</Link>
               )}
-              <button className="text-sm font-medium text-red-600" onClick={() => { handleLogout(); setMobileOpen(false); }}>Keluar</button>
+              <button className="text-sm font-medium text-red-600" onClick={() => { handleLogout(); setMobileOpen(false); }}>{t('nav_logout')}</button>
             </>
           ) : (
             <div className="flex gap-2 pt-2">
-              <Button variant="outline" className="flex-1 text-sm" onClick={() => { navigate('/login'); setMobileOpen(false); }}>Masuk</Button>
-              <Button className="flex-1 text-sm bg-[#143D2E] text-white" onClick={() => { navigate('/register'); setMobileOpen(false); }}>Daftar</Button>
+              <Button variant="outline" className="flex-1 text-sm" onClick={() => { navigate('/login'); setMobileOpen(false); }}>{t('nav_login')}</Button>
+              <Button className="flex-1 text-sm bg-[#143D2E] text-white" onClick={() => { navigate('/register'); setMobileOpen(false); }}>{t('nav_register')}</Button>
             </div>
           )}
         </div>
