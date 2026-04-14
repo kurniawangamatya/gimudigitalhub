@@ -1,0 +1,125 @@
+import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
+import { BookOpen, Eye, EyeOff } from 'lucide-react';
+
+function formatApiErrorDetail(detail) {
+  if (detail == null) return 'Terjadi kesalahan. Silakan coba lagi.';
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) return detail.map(e => e?.msg || JSON.stringify(e)).filter(Boolean).join(' ');
+  if (detail?.msg) return detail.msg;
+  return String(detail);
+}
+
+export default function RegisterPage() {
+  const { register } = useAuth();
+  const navigate = useNavigate();
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPass, setShowPass] = useState(false);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (password.length < 6) { setError('Password minimal 6 karakter'); return; }
+    setLoading(true);
+    try {
+      await register(name, email, password);
+      navigate('/');
+    } catch (err) {
+      setError(formatApiErrorDetail(err.response?.data?.detail) || err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-[#FBFBF9] px-6" data-testid="register-page">
+      <div className="w-full max-w-sm">
+        <div className="text-center mb-8">
+          <Link to="/" className="inline-flex items-center gap-2 mb-6">
+            <div className="w-10 h-10 rounded-xl bg-[#143D2E] flex items-center justify-center">
+              <BookOpen className="w-5 h-5 text-white" strokeWidth={1.5} />
+            </div>
+            <span className="font-heading font-semibold text-xl text-[#1E2320]">Gimu Digital Hub</span>
+          </Link>
+          <h1 className="font-heading text-2xl font-medium text-[#1E2320]">Buat Akun Baru</h1>
+          <p className="text-sm text-[#6C7A70] mt-1">Mulai akses produk digital medis terbaik</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="bg-white rounded-2xl p-6 border border-[#E5E7E2] shadow-sm space-y-4">
+          {error && (
+            <div className="bg-red-50 text-red-600 text-sm p-3 rounded-lg" data-testid="register-error">{error}</div>
+          )}
+          <div>
+            <Label htmlFor="name" className="text-sm text-[#1E2320]">Nama Lengkap</Label>
+            <Input
+              id="name"
+              type="text"
+              placeholder="Dr. Nama Anda"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="mt-1.5 rounded-xl border-[#E5E7E2]"
+              required
+              data-testid="register-name-input"
+            />
+          </div>
+          <div>
+            <Label htmlFor="email" className="text-sm text-[#1E2320]">Email</Label>
+            <Input
+              id="email"
+              type="email"
+              placeholder="nama@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="mt-1.5 rounded-xl border-[#E5E7E2]"
+              required
+              data-testid="register-email-input"
+            />
+          </div>
+          <div>
+            <Label htmlFor="password" className="text-sm text-[#1E2320]">Password</Label>
+            <div className="relative mt-1.5">
+              <Input
+                id="password"
+                type={showPass ? 'text' : 'password'}
+                placeholder="Minimal 6 karakter"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="rounded-xl border-[#E5E7E2] pr-10"
+                required
+                data-testid="register-password-input"
+              />
+              <button
+                type="button"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6C7A70]"
+                onClick={() => setShowPass(!showPass)}
+              >
+                {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+          <Button
+            type="submit"
+            className="w-full rounded-full py-2.5 bg-[#143D2E] hover:bg-[#143D2E]/90 text-white text-sm font-semibold"
+            disabled={loading}
+            data-testid="register-submit-button"
+          >
+            {loading ? 'Mendaftar...' : 'Daftar'}
+          </Button>
+        </form>
+
+        <p className="text-center text-sm text-[#6C7A70] mt-6">
+          Sudah punya akun?{' '}
+          <Link to="/login" className="text-[#143D2E] font-medium hover:underline" data-testid="go-to-login">Masuk di sini</Link>
+        </p>
+      </div>
+    </div>
+  );
+}

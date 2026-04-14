@@ -1,72 +1,549 @@
-from fastapi import FastAPI, APIRouter
 from dotenv import load_dotenv
-from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
-import os
-import logging
 from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict
-from typing import List
-import uuid
-from datetime import datetime, timezone
-
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
+
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends
+from starlette.middleware.cors import CORSMiddleware
+from motor.motor_asyncio import AsyncIOMotorClient
+from bson import ObjectId
+import os
+import logging
+import uuid
+import bcrypt
+import jwt
+import secrets
+from datetime import datetime, timezone, timedelta
+from pydantic import BaseModel, Field, ConfigDict
+from typing import List, Optional, Dict
+from emergentintegrations.payments.stripe.checkout import (
+    StripeCheckout, CheckoutSessionResponse, CheckoutStatusResponse, CheckoutSessionRequest
+)
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
-# Create the main app without a prefix
 app = FastAPI()
-
-# Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
-# Define Models
-class StatusCheck(BaseModel):
-    model_config = ConfigDict(extra="ignore")  # Ignore MongoDB's _id field
-    
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    client_name: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+JWT_ALGORITHM = "HS256"
 
-class StatusCheckCreate(BaseModel):
-    client_name: str
+def get_jwt_secret():
+    return os.environ["JWT_SECRET"]
 
-# Add your routes to the router instead of directly to app
-@api_router.get("/")
-async def root():
-    return {"message": "Hello World"}
+def hash_password(password: str) -> str:
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password.encode("utf-8"), salt)
+    return hashed.decode("utf-8")
 
-@api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.model_dump()
-    status_obj = StatusCheck(**status_dict)
-    
-    # Convert to dict and serialize datetime to ISO string for MongoDB
-    doc = status_obj.model_dump()
-    doc['timestamp'] = doc['timestamp'].isoformat()
-    
-    _ = await db.status_checks.insert_one(doc)
-    return status_obj
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
 
-@api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks():
-    # Exclude MongoDB's _id field from the query results
-    status_checks = await db.status_checks.find({}, {"_id": 0}).to_list(1000)
-    
-    # Convert ISO string timestamps back to datetime objects
-    for check in status_checks:
-        if isinstance(check['timestamp'], str):
-            check['timestamp'] = datetime.fromisoformat(check['timestamp'])
-    
-    return status_checks
+def create_access_token(user_id: str, email: str) -> str:
+    payload = {"sub": user_id, "email": email, "exp": datetime.now(timezone.utc) + timedelta(minutes=15), "type": "access"}
+    return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
 
-# Include the router in the main app
+def create_refresh_token(user_id: str) -> str:
+    payload = {"sub": user_id, "exp": datetime.now(timezone.utc) + timedelta(days=7), "type": "refresh"}
+    return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
+
+async def get_current_user(request: Request) -> dict:
+    token = request.cookies.get("access_token")
+    if not token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
+        if payload.get("type") != "access":
+            raise HTTPException(status_code=401, detail="Invalid token type")
+        user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+        user["_id"] = str(user["_id"])
+        user.pop("password_hash", None)
+        return user
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+async def get_optional_user(request: Request):
+    try:
+        return await get_current_user(request)
+    except HTTPException:
+        return None
+
+# ============ MODELS ============
+class RegisterRequest(BaseModel):
+    name: str
+    email: str
+    password: str
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+class ProductOut(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    title: str
+    description: str
+    price: float
+    category: str
+    image_url: str
+    features: List[str] = []
+    rating: float = 4.5
+    reviews_count: int = 0
+    badge: str = ""
+
+class CartItemRequest(BaseModel):
+    product_id: str
+    quantity: int = 1
+
+class CheckoutRequest(BaseModel):
+    origin_url: str
+
+def set_auth_cookies(response: Response, access_token: str, refresh_token: str):
+    response.set_cookie(key="access_token", value=access_token, httponly=True, secure=False, samesite="lax", max_age=900, path="/")
+    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, secure=False, samesite="lax", max_age=604800, path="/")
+
+# ============ AUTH ROUTES ============
+@api_router.post("/auth/register")
+async def register(req: RegisterRequest, response: Response):
+    email = req.email.lower().strip()
+    existing = await db.users.find_one({"email": email})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    hashed = hash_password(req.password)
+    user_doc = {
+        "email": email,
+        "password_hash": hashed,
+        "name": req.name,
+        "role": "user",
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    result = await db.users.insert_one(user_doc)
+    user_id = str(result.inserted_id)
+    access_token = create_access_token(user_id, email)
+    refresh_token = create_refresh_token(user_id)
+    set_auth_cookies(response, access_token, refresh_token)
+    return {"id": user_id, "email": email, "name": req.name, "role": "user"}
+
+@api_router.post("/auth/login")
+async def login(req: LoginRequest, request: Request, response: Response):
+    email = req.email.lower().strip()
+    ip = request.client.host if request.client else "unknown"
+    identifier = f"{ip}:{email}"
+    attempt = await db.login_attempts.find_one({"identifier": identifier}, {"_id": 0})
+    if attempt and attempt.get("count", 0) >= 5:
+        locked_until = attempt.get("locked_until")
+        if locked_until and datetime.now(timezone.utc) < datetime.fromisoformat(locked_until):
+            raise HTTPException(status_code=429, detail="Too many failed attempts. Try again in 15 minutes.")
+        else:
+            await db.login_attempts.delete_one({"identifier": identifier})
+
+    user = await db.users.find_one({"email": email})
+    if not user or not verify_password(req.password, user["password_hash"]):
+        await db.login_attempts.update_one(
+            {"identifier": identifier},
+            {"$inc": {"count": 1}, "$set": {"locked_until": (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat()}},
+            upsert=True
+        )
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    await db.login_attempts.delete_one({"identifier": identifier})
+    user_id = str(user["_id"])
+    access_token = create_access_token(user_id, email)
+    refresh_token = create_refresh_token(user_id)
+    set_auth_cookies(response, access_token, refresh_token)
+    return {"id": user_id, "email": email, "name": user.get("name", ""), "role": user.get("role", "user")}
+
+@api_router.post("/auth/logout")
+async def logout(response: Response):
+    response.delete_cookie("access_token", path="/")
+    response.delete_cookie("refresh_token", path="/")
+    return {"message": "Logged out"}
+
+@api_router.get("/auth/me")
+async def get_me(request: Request):
+    user = await get_current_user(request)
+    return user
+
+@api_router.post("/auth/refresh")
+async def refresh_token(request: Request, response: Response):
+    token = request.cookies.get("refresh_token")
+    if not token:
+        raise HTTPException(status_code=401, detail="No refresh token")
+    try:
+        payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
+        if payload.get("type") != "refresh":
+            raise HTTPException(status_code=401, detail="Invalid token type")
+        user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+        user_id = str(user["_id"])
+        access_token = create_access_token(user_id, user["email"])
+        set_auth_cookies(response, access_token, token)
+        return {"message": "Token refreshed"}
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+# ============ PRODUCT ROUTES ============
+@api_router.get("/products")
+async def get_products(category: Optional[str] = None, search: Optional[str] = None):
+    query = {}
+    if category and category != "all":
+        query["category"] = category
+    if search:
+        query["$or"] = [
+            {"title": {"$regex": search, "$options": "i"}},
+            {"description": {"$regex": search, "$options": "i"}}
+        ]
+    products = await db.products.find(query, {"_id": 0}).to_list(100)
+    return products
+
+@api_router.get("/products/{product_id}")
+async def get_product(product_id: str):
+    product = await db.products.find_one({"id": product_id}, {"_id": 0})
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return product
+
+# ============ CART ROUTES ============
+@api_router.get("/cart")
+async def get_cart(request: Request):
+    user = await get_current_user(request)
+    cart_items = await db.cart.find({"user_id": user["_id"]}, {"_id": 0}).to_list(100)
+    enriched = []
+    for item in cart_items:
+        product = await db.products.find_one({"id": item["product_id"]}, {"_id": 0})
+        if product:
+            enriched.append({**item, "product": product})
+    return enriched
+
+@api_router.post("/cart")
+async def add_to_cart(req: CartItemRequest, request: Request):
+    user = await get_current_user(request)
+    existing = await db.cart.find_one({"user_id": user["_id"], "product_id": req.product_id})
+    if existing:
+        await db.cart.update_one(
+            {"user_id": user["_id"], "product_id": req.product_id},
+            {"$inc": {"quantity": req.quantity}}
+        )
+    else:
+        await db.cart.insert_one({
+            "user_id": user["_id"],
+            "product_id": req.product_id,
+            "quantity": req.quantity,
+            "added_at": datetime.now(timezone.utc).isoformat()
+        })
+    return {"message": "Added to cart"}
+
+@api_router.delete("/cart/{product_id}")
+async def remove_from_cart(product_id: str, request: Request):
+    user = await get_current_user(request)
+    await db.cart.delete_one({"user_id": user["_id"], "product_id": product_id})
+    return {"message": "Removed from cart"}
+
+@api_router.delete("/cart")
+async def clear_cart(request: Request):
+    user = await get_current_user(request)
+    await db.cart.delete_many({"user_id": user["_id"]})
+    return {"message": "Cart cleared"}
+
+# ============ CHECKOUT ROUTES ============
+@api_router.post("/checkout/create-session")
+async def create_checkout_session(req: CheckoutRequest, request: Request, http_request: Request):
+    user = await get_current_user(request)
+    cart_items = await db.cart.find({"user_id": user["_id"]}, {"_id": 0}).to_list(100)
+    if not cart_items:
+        raise HTTPException(status_code=400, detail="Cart is empty")
+
+    total = 0.0
+    product_ids = []
+    for item in cart_items:
+        product = await db.products.find_one({"id": item["product_id"]}, {"_id": 0})
+        if product:
+            total += product["price"] * item["quantity"]
+            product_ids.append(item["product_id"])
+
+    if total <= 0:
+        raise HTTPException(status_code=400, detail="Invalid cart total")
+
+    origin_url = req.origin_url.rstrip("/")
+    success_url = f"{origin_url}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}"
+    cancel_url = f"{origin_url}/cart"
+
+    stripe_api_key = os.environ.get("STRIPE_API_KEY")
+    host_url = str(http_request.base_url)
+    webhook_url = f"{host_url}api/webhook/stripe"
+    stripe_checkout = StripeCheckout(api_key=stripe_api_key, webhook_url=webhook_url)
+
+    checkout_request = CheckoutSessionRequest(
+        amount=round(total, 2),
+        currency="usd",
+        success_url=success_url,
+        cancel_url=cancel_url,
+        metadata={"user_id": user["_id"], "user_email": user["email"], "product_ids": ",".join(product_ids)}
+    )
+    session = await stripe_checkout.create_checkout_session(checkout_request)
+
+    await db.payment_transactions.insert_one({
+        "session_id": session.session_id,
+        "user_id": user["_id"],
+        "user_email": user["email"],
+        "amount": round(total, 2),
+        "currency": "usd",
+        "product_ids": product_ids,
+        "payment_status": "pending",
+        "status": "initiated",
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+
+    return {"url": session.url, "session_id": session.session_id}
+
+@api_router.get("/checkout/status/{session_id}")
+async def get_checkout_status(session_id: str, request: Request):
+    user = await get_current_user(request)
+    transaction = await db.payment_transactions.find_one({"session_id": session_id, "user_id": user["_id"]}, {"_id": 0})
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    if transaction.get("payment_status") == "paid":
+        return transaction
+
+    stripe_api_key = os.environ.get("STRIPE_API_KEY")
+    host_url = str(request.base_url)
+    webhook_url = f"{host_url}api/webhook/stripe"
+    stripe_checkout = StripeCheckout(api_key=stripe_api_key, webhook_url=webhook_url)
+    status = await stripe_checkout.get_checkout_status(session_id)
+
+    update_data = {"payment_status": status.payment_status, "status": status.status}
+    await db.payment_transactions.update_one({"session_id": session_id}, {"$set": update_data})
+
+    if status.payment_status == "paid" and transaction.get("payment_status") != "paid":
+        await db.cart.delete_many({"user_id": user["_id"]})
+        await db.orders.insert_one({
+            "id": str(uuid.uuid4()),
+            "user_id": user["_id"],
+            "user_email": user["email"],
+            "product_ids": transaction.get("product_ids", []),
+            "amount": transaction.get("amount", 0),
+            "currency": "usd",
+            "session_id": session_id,
+            "status": "completed",
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
+
+    updated = await db.payment_transactions.find_one({"session_id": session_id}, {"_id": 0})
+    return updated
+
+@api_router.post("/webhook/stripe")
+async def stripe_webhook(request: Request):
+    body = await request.body()
+    signature = request.headers.get("Stripe-Signature")
+    stripe_api_key = os.environ.get("STRIPE_API_KEY")
+    host_url = str(request.base_url)
+    webhook_url = f"{host_url}api/webhook/stripe"
+    stripe_checkout = StripeCheckout(api_key=stripe_api_key, webhook_url=webhook_url)
+    try:
+        webhook_response = await stripe_checkout.handle_webhook(body, signature)
+        if webhook_response.payment_status == "paid":
+            transaction = await db.payment_transactions.find_one({"session_id": webhook_response.session_id})
+            if transaction and transaction.get("payment_status") != "paid":
+                await db.payment_transactions.update_one(
+                    {"session_id": webhook_response.session_id},
+                    {"$set": {"payment_status": "paid", "status": "complete"}}
+                )
+        return {"status": "ok"}
+    except Exception as e:
+        logger.error(f"Webhook error: {e}")
+        return {"status": "error"}
+
+# ============ ORDERS ============
+@api_router.get("/orders")
+async def get_orders(request: Request):
+    user = await get_current_user(request)
+    orders = await db.orders.find({"user_id": user["_id"]}, {"_id": 0}).to_list(100)
+    return orders
+
+# ============ SEED DATA ============
+SEED_PRODUCTS = [
+    {
+        "id": "ebook-anatomi-klinis",
+        "title": "E-Book Anatomi Klinis Lengkap",
+        "description": "Panduan komprehensif anatomi klinis untuk dokter umum dan mahasiswa kedokteran. Dilengkapi ilustrasi detail dan studi kasus.",
+        "price": 15.00,
+        "category": "ebook",
+        "image_url": "https://images.unsplash.com/photo-1676313496173-e3b325353087?w=600",
+        "features": ["500+ halaman", "Ilustrasi HD", "Studi kasus", "Update berkala"],
+        "rating": 4.8,
+        "reviews_count": 124,
+        "badge": "Best Seller"
+    },
+    {
+        "id": "ebook-farmakologi",
+        "title": "E-Book Farmakologi Praktis",
+        "description": "Referensi cepat farmakologi untuk praktik sehari-hari. Dosis, interaksi obat, dan efek samping.",
+        "price": 12.00,
+        "category": "ebook",
+        "image_url": "https://images.unsplash.com/photo-1587854692152-cbe660dbde88?w=600",
+        "features": ["Referensi dosis", "Interaksi obat", "Format ringkas", "Offline access"],
+        "rating": 4.6,
+        "reviews_count": 89,
+        "badge": ""
+    },
+    {
+        "id": "video-bedah-minor",
+        "title": "Video Kursus Bedah Minor",
+        "description": "Kursus video lengkap prosedur bedah minor untuk dokter umum. Dari persiapan hingga follow-up pasien.",
+        "price": 25.00,
+        "category": "video",
+        "image_url": "https://images.unsplash.com/photo-1666886573264-38075cc56104?w=600",
+        "features": ["20+ video HD", "Sertifikat", "Forum diskusi", "Akses seumur hidup"],
+        "rating": 4.9,
+        "reviews_count": 203,
+        "badge": "Popular"
+    },
+    {
+        "id": "video-radiologi-dasar",
+        "title": "Video Kursus Radiologi Dasar",
+        "description": "Pelajari interpretasi foto rontgen, CT scan, dan MRI dari dasar. Cocok untuk dokter umum.",
+        "price": 20.00,
+        "category": "video",
+        "image_url": "https://images.unsplash.com/photo-1559757175-5700dde675bc?w=600",
+        "features": ["15+ video", "Quiz interaktif", "Studi kasus", "Sertifikat"],
+        "rating": 4.7,
+        "reviews_count": 156,
+        "badge": ""
+    },
+    {
+        "id": "template-rekam-medis",
+        "title": "Template Rekam Medis Digital",
+        "description": "Koleksi template rekam medis digital yang siap pakai untuk klinik dan praktik mandiri.",
+        "price": 10.00,
+        "category": "template",
+        "image_url": "https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=600",
+        "features": ["50+ template", "Format editable", "Sesuai standar", "Update gratis"],
+        "rating": 4.5,
+        "reviews_count": 78,
+        "badge": "New"
+    },
+    {
+        "id": "template-informed-consent",
+        "title": "Template Informed Consent",
+        "description": "Kumpulan template informed consent untuk berbagai prosedur medis dan dental.",
+        "price": 8.00,
+        "category": "template",
+        "image_url": "https://images.unsplash.com/photo-1450101499163-c8848c66ca85?w=600",
+        "features": ["30+ template", "Legal reviewed", "Bilingual", "Customizable"],
+        "rating": 4.4,
+        "reviews_count": 45,
+        "badge": ""
+    },
+    {
+        "id": "quiz-ukmppd",
+        "title": "Bank Soal UKMPPD Premium",
+        "description": "2000+ soal latihan UKMPPD dengan pembahasan lengkap. Tingkatkan peluang kelulusan Anda.",
+        "price": 18.00,
+        "category": "quiz",
+        "image_url": "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=600",
+        "features": ["2000+ soal", "Pembahasan detail", "Simulasi ujian", "Progress tracking"],
+        "rating": 4.8,
+        "reviews_count": 312,
+        "badge": "Best Seller"
+    },
+    {
+        "id": "ebook-kedokteran-gigi",
+        "title": "E-Book Kedokteran Gigi Terpadu",
+        "description": "Panduan lengkap kedokteran gigi dari konservasi hingga bedah mulut. Untuk dokter gigi dan calon dokter gigi.",
+        "price": 16.00,
+        "category": "ebook",
+        "image_url": "https://images.unsplash.com/photo-1619691249147-c5689d88016b?w=600",
+        "features": ["400+ halaman", "Gambar klinis", "Protokol terbaru", "Case-based"],
+        "rating": 4.7,
+        "reviews_count": 98,
+        "badge": ""
+    },
+    {
+        "id": "video-dental-photography",
+        "title": "Video Kursus Dental Photography",
+        "description": "Teknik fotografi dental profesional untuk dokumentasi dan presentasi kasus.",
+        "price": 22.00,
+        "category": "video",
+        "image_url": "https://images.unsplash.com/photo-1606811841689-23dfddce3e95?w=600",
+        "features": ["12 video", "Setting kamera", "Editing tips", "Portfolio guide"],
+        "rating": 4.6,
+        "reviews_count": 67,
+        "badge": "New"
+    },
+    {
+        "id": "quiz-dental",
+        "title": "Bank Soal Kedokteran Gigi",
+        "description": "1500+ soal latihan kedokteran gigi dengan pembahasan. Persiapan UKMP2DG terbaik.",
+        "price": 15.00,
+        "category": "quiz",
+        "image_url": "https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?w=600",
+        "features": ["1500+ soal", "Pembahasan lengkap", "Timer ujian", "Leaderboard"],
+        "rating": 4.7,
+        "reviews_count": 189,
+        "badge": "Popular"
+    }
+]
+
+async def seed_admin():
+    admin_email = os.environ.get("ADMIN_EMAIL", "admin@gimudigital.com")
+    admin_password = os.environ.get("ADMIN_PASSWORD", "admin123")
+    existing = await db.users.find_one({"email": admin_email})
+    if existing is None:
+        hashed = hash_password(admin_password)
+        await db.users.insert_one({
+            "email": admin_email,
+            "password_hash": hashed,
+            "name": "Admin",
+            "role": "admin",
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
+        logger.info(f"Admin seeded: {admin_email}")
+    elif not verify_password(admin_password, existing["password_hash"]):
+        await db.users.update_one({"email": admin_email}, {"$set": {"password_hash": hash_password(admin_password)}})
+        logger.info("Admin password updated")
+
+async def seed_products():
+    count = await db.products.count_documents({})
+    if count == 0:
+        await db.products.insert_many(SEED_PRODUCTS)
+        logger.info(f"Seeded {len(SEED_PRODUCTS)} products")
+
+@app.on_event("startup")
+async def startup():
+    await db.users.create_index("email", unique=True)
+    await db.login_attempts.create_index("identifier")
+    await db.products.create_index("category")
+    await db.products.create_index("id", unique=True)
+    await seed_admin()
+    await seed_products()
+    # Write test credentials
+    os.makedirs("/app/memory", exist_ok=True)
+    with open("/app/memory/test_credentials.md", "w") as f:
+        f.write(f"# Test Credentials\n\n")
+        f.write(f"## Admin\n- Email: {os.environ.get('ADMIN_EMAIL', 'admin@gimudigital.com')}\n- Password: {os.environ.get('ADMIN_PASSWORD', 'admin123')}\n- Role: admin\n\n")
+        f.write(f"## Test User\n- Email: test@example.com\n- Password: test123\n- Role: user\n\n")
+        f.write(f"## Auth Endpoints\n- POST /api/auth/register\n- POST /api/auth/login\n- POST /api/auth/logout\n- GET /api/auth/me\n- POST /api/auth/refresh\n\n")
+        f.write(f"## Product Endpoints\n- GET /api/products\n- GET /api/products/{{id}}\n\n")
+        f.write(f"## Cart Endpoints\n- GET /api/cart\n- POST /api/cart\n- DELETE /api/cart/{{product_id}}\n- DELETE /api/cart\n\n")
+        f.write(f"## Checkout Endpoints\n- POST /api/checkout/create-session\n- GET /api/checkout/status/{{session_id}}\n")
+
 app.include_router(api_router)
 
 app.add_middleware(
@@ -76,13 +553,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
