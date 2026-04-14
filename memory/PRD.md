@@ -46,6 +46,8 @@ Landing page dan platform e-commerce untuk produk digital kedokteran dan kedokte
 - Admin CRUD: create, edit, delete products with form dialog
 - Admin product table with category filters and search
 - Admin-only route protection (role-based access)
+- Email notifikasi via Brevo: welcome email, reset password email, konfirmasi pembelian
+- Admin test email button di dashboard
 
 ## Test Results
 - Backend: 100% (13/13 tests passing)
