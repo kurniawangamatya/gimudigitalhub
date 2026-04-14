@@ -151,6 +151,12 @@ class ProductUpdateRequest(BaseModel):
     features: Optional[List[str]] = None
     badge: Optional[str] = None
 
+class UserRoleUpdate(BaseModel):
+    role: str
+
+class UserBanUpdate(BaseModel):
+    banned: bool
+
 async def require_admin(request: Request) -> dict:
     user = await get_current_user(request)
     if user.get("role") != "admin":
@@ -211,6 +217,9 @@ async def login(req: LoginRequest, request: Request, response: Response):
             upsert=True
         )
         raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    if user.get("banned"):
+        raise HTTPException(status_code=403, detail="Akun Anda telah dinonaktifkan. Hubungi admin untuk informasi lebih lanjut.")
 
     await db.login_attempts.delete_one({"identifier": identifier})
     user_id = str(user["_id"])
@@ -614,8 +623,40 @@ async def admin_delete_product(product_id: str, request: Request):
 @api_router.get("/admin/users")
 async def admin_get_users(request: Request):
     await require_admin(request)
-    users = await db.users.find({}, {"_id": 0, "password_hash": 0}).to_list(1000)
+    users = await db.users.find({}, {"password_hash": 0}).to_list(1000)
+    for u in users:
+        u["_id"] = str(u["_id"])
     return users
+
+@api_router.put("/admin/users/{user_id}/role")
+async def admin_update_user_role(user_id: str, req: UserRoleUpdate, request: Request):
+    admin = await require_admin(request)
+    if req.role not in ("user", "admin"):
+        raise HTTPException(status_code=400, detail="Role harus 'user' atau 'admin'")
+    if user_id == admin["_id"]:
+        raise HTTPException(status_code=400, detail="Tidak bisa mengubah role sendiri")
+    target = await db.users.find_one({"_id": ObjectId(user_id)})
+    if not target:
+        raise HTTPException(status_code=404, detail="User tidak ditemukan")
+    await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": {"role": req.role, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    updated = await db.users.find_one({"_id": ObjectId(user_id)}, {"password_hash": 0})
+    updated["_id"] = str(updated["_id"])
+    return updated
+
+@api_router.put("/admin/users/{user_id}/ban")
+async def admin_ban_user(user_id: str, req: UserBanUpdate, request: Request):
+    admin = await require_admin(request)
+    if user_id == admin["_id"]:
+        raise HTTPException(status_code=400, detail="Tidak bisa ban akun sendiri")
+    target = await db.users.find_one({"_id": ObjectId(user_id)})
+    if not target:
+        raise HTTPException(status_code=404, detail="User tidak ditemukan")
+    if target.get("role") == "admin" and req.banned:
+        raise HTTPException(status_code=400, detail="Tidak bisa ban admin lain. Ubah role ke user terlebih dahulu.")
+    await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": {"banned": req.banned, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    updated = await db.users.find_one({"_id": ObjectId(user_id)}, {"password_hash": 0})
+    updated["_id"] = str(updated["_id"])
+    return updated
 
 @api_router.post("/admin/test-email")
 async def admin_test_email(request: Request):

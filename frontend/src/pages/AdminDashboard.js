@@ -35,8 +35,15 @@ import {
 } from '../components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '../components/ui/tabs';
+import {
   Plus, Pencil, Trash2, MoreVertical, Package, Users, ShoppingCart,
-  DollarSign, BookOpen, Video, FileText, HelpCircle, ArrowLeft, X, Search, Mail, Send
+  DollarSign, BookOpen, Video, FileText, HelpCircle, ArrowLeft, X, Search, Mail, Send,
+  Shield, ShieldOff, UserCheck, Ban
 } from 'lucide-react';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -244,9 +251,12 @@ export default function AdminDashboard() {
   const { user, loading: authLoading } = useAuth();
   const [stats, setStats] = useState(null);
   const [products, setProducts] = useState([]);
+  const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
+  const [userSearch, setUserSearch] = useState('');
+  const [activeTab, setActiveTab] = useState('products');
 
   const [sendingTestEmail, setSendingTestEmail] = useState(false);
 
@@ -270,12 +280,14 @@ export default function AdminDashboard() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [statsRes, productsRes] = await Promise.all([
+      const [statsRes, productsRes, usersRes] = await Promise.all([
         axios.get(`${API}/admin/stats`, { withCredentials: true }),
         axios.get(`${API}/products`, { withCredentials: true }),
+        axios.get(`${API}/admin/users`, { withCredentials: true }),
       ]);
       setStats(statsRes.data);
       setProducts(productsRes.data);
+      setUsers(usersRes.data);
     } catch {
       toast.error('Gagal memuat data');
     } finally {
@@ -298,6 +310,30 @@ export default function AdminDashboard() {
   const openCreate = () => { setEditProduct(null); setFormOpen(true); };
   const openEdit = (p) => { setEditProduct(p); setFormOpen(true); };
   const openDelete = (p) => { setDeleteProduct(p); setDeleteOpen(true); };
+
+  const handleChangeRole = async (userId, newRole) => {
+    try {
+      await axios.put(`${API}/admin/users/${userId}/role`, { role: newRole }, { withCredentials: true });
+      toast.success(`Role berhasil diubah ke ${newRole}`);
+      fetchData();
+    } catch (err) {
+      toast.error(formatApiError(err.response?.data?.detail));
+    }
+  };
+
+  const handleToggleBan = async (userId, banned) => {
+    try {
+      await axios.put(`${API}/admin/users/${userId}/ban`, { banned }, { withCredentials: true });
+      toast.success(banned ? 'User berhasil dinonaktifkan' : 'User berhasil diaktifkan kembali');
+      fetchData();
+    } catch (err) {
+      toast.error(formatApiError(err.response?.data?.detail));
+    }
+  };
+
+  const filteredUsers = users.filter(u =>
+    !userSearch || u.name?.toLowerCase().includes(userSearch.toLowerCase()) || u.email?.toLowerCase().includes(userSearch.toLowerCase())
+  );
 
   if (authLoading || loading) {
     return (
@@ -323,11 +359,8 @@ export default function AdminDashboard() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="font-heading text-3xl tracking-tight font-medium text-[#1E2320]" data-testid="admin-title">Admin Dashboard</h1>
-            <p className="text-base text-[#6C7A70] mt-1">Kelola produk digital Gimu Digital Hub</p>
+            <p className="text-base text-[#6C7A70] mt-1">Kelola produk dan pengguna Gimu Digital Hub</p>
           </div>
-          <Button className="rounded-full px-5 bg-[#143D2E] hover:bg-[#143D2E]/90 text-white text-sm font-semibold" onClick={openCreate} data-testid="add-product-button">
-            <Plus className="w-4 h-4 mr-1.5" strokeWidth={1.5} /> Tambah Produk
-          </Button>
         </div>
 
         {/* Stats */}
@@ -364,112 +397,177 @@ export default function AdminDashboard() {
           </Button>
         </div>
 
-        {/* Filters */}
-        <div className="bg-white rounded-2xl border border-[#E5E7E2] shadow-sm overflow-hidden">
-          <div className="p-4 border-b border-[#E5E7E2] flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-            <div className="flex gap-2 flex-wrap">
-              <Button
-                variant={filterCategory === 'all' ? 'default' : 'outline'}
-                size="sm"
-                className={`rounded-full text-xs ${filterCategory === 'all' ? 'bg-[#143D2E] text-white' : 'border-[#E5E7E2] text-[#6C7A70]'}`}
-                onClick={() => setFilterCategory('all')}
-                data-testid="admin-filter-all"
-              >
-                Semua ({products.length})
-              </Button>
-              {categoryOptions.map(c => (
-                <Button
-                  key={c.value}
-                  variant={filterCategory === c.value ? 'default' : 'outline'}
-                  size="sm"
-                  className={`rounded-full text-xs ${filterCategory === c.value ? 'bg-[#143D2E] text-white' : 'border-[#E5E7E2] text-[#6C7A70]'}`}
-                  onClick={() => setFilterCategory(c.value)}
-                  data-testid={`admin-filter-${c.value}`}
-                >
-                  {c.label} ({stats?.category_counts?.[c.value] || 0})
-                </Button>
-              ))}
-            </div>
-            <div className="relative w-full sm:w-56">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#6C7A70]" strokeWidth={1.5} />
-              <Input
-                placeholder="Cari produk..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="pl-9 rounded-full border-[#E5E7E2] text-sm"
-                data-testid="admin-search-input"
-              />
-            </div>
-          </div>
+        {/* Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="bg-[#F0F2ED] rounded-xl p-1 mb-6">
+            <TabsTrigger value="products" className="rounded-lg text-sm data-[state=active]:bg-white data-[state=active]:text-[#143D2E] data-[state=active]:shadow-sm" data-testid="tab-products">
+              <Package className="w-4 h-4 mr-1.5" strokeWidth={1.5} /> Produk
+            </TabsTrigger>
+            <TabsTrigger value="users" className="rounded-lg text-sm data-[state=active]:bg-white data-[state=active]:text-[#143D2E] data-[state=active]:shadow-sm" data-testid="tab-users">
+              <Users className="w-4 h-4 mr-1.5" strokeWidth={1.5} /> Pengguna
+            </TabsTrigger>
+          </TabsList>
 
-          {/* Product Table */}
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-[#F0F2ED]/50">
-                <TableHead className="text-xs uppercase tracking-wider text-[#6C7A70] font-semibold">Produk</TableHead>
-                <TableHead className="text-xs uppercase tracking-wider text-[#6C7A70] font-semibold">Kategori</TableHead>
-                <TableHead className="text-xs uppercase tracking-wider text-[#6C7A70] font-semibold">Harga</TableHead>
-                <TableHead className="text-xs uppercase tracking-wider text-[#6C7A70] font-semibold">Rating</TableHead>
-                <TableHead className="text-xs uppercase tracking-wider text-[#6C7A70] font-semibold">Badge</TableHead>
-                <TableHead className="text-xs uppercase tracking-wider text-[#6C7A70] font-semibold w-12"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-12 text-[#6C7A70]" data-testid="no-admin-products">
-                    Tidak ada produk ditemukan
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filtered.map(p => (
-                  <TableRow key={p.id} className="hover:bg-[#F0F2ED]/30" data-testid={`admin-product-row-${p.id}`}>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <img src={p.image_url} alt={p.title} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-[#1E2320] truncate max-w-[200px]">{p.title}</p>
-                          <p className="text-xs text-[#6C7A70] truncate max-w-[200px]">{p.description}</p>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="text-[10px] uppercase tracking-wider border-[#E5E7E2] text-[#6C7A70]">
-                        {categoryLabels[p.category] || p.category}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="font-heading font-medium text-sm text-[#143D2E]">${p.price.toFixed(2)}</TableCell>
-                    <TableCell className="text-sm text-[#1E2320]">{p.rating} ({p.reviews_count})</TableCell>
-                    <TableCell>
-                      {p.badge ? (
-                        <Badge className="bg-[#143D2E]/10 text-[#143D2E] text-[10px] uppercase">{p.badge}</Badge>
-                      ) : (
-                        <span className="text-xs text-[#E5E7E2]">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8" data-testid={`admin-product-menu-${p.id}`}>
-                            <MoreVertical className="w-4 h-4 text-[#6C7A70]" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => openEdit(p)} data-testid={`edit-product-${p.id}`}>
-                            <Pencil className="w-3.5 h-3.5 mr-2" /> Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => openDelete(p)} className="text-red-600 focus:text-red-600" data-testid={`delete-product-${p.id}`}>
-                            <Trash2 className="w-3.5 h-3.5 mr-2" /> Hapus
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
+          {/* Products Tab */}
+          <TabsContent value="products">
+            <div className="flex justify-end mb-4">
+              <Button className="rounded-full px-5 bg-[#143D2E] hover:bg-[#143D2E]/90 text-white text-sm font-semibold" onClick={openCreate} data-testid="add-product-button">
+                <Plus className="w-4 h-4 mr-1.5" strokeWidth={1.5} /> Tambah Produk
+              </Button>
+            </div>
+            <div className="bg-white rounded-2xl border border-[#E5E7E2] shadow-sm overflow-hidden">
+              <div className="p-4 border-b border-[#E5E7E2] flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+                <div className="flex gap-2 flex-wrap">
+                  <Button variant={filterCategory === 'all' ? 'default' : 'outline'} size="sm" className={`rounded-full text-xs ${filterCategory === 'all' ? 'bg-[#143D2E] text-white' : 'border-[#E5E7E2] text-[#6C7A70]'}`} onClick={() => setFilterCategory('all')} data-testid="admin-filter-all">
+                    Semua ({products.length})
+                  </Button>
+                  {categoryOptions.map(c => (
+                    <Button key={c.value} variant={filterCategory === c.value ? 'default' : 'outline'} size="sm" className={`rounded-full text-xs ${filterCategory === c.value ? 'bg-[#143D2E] text-white' : 'border-[#E5E7E2] text-[#6C7A70]'}`} onClick={() => setFilterCategory(c.value)} data-testid={`admin-filter-${c.value}`}>
+                      {c.label} ({stats?.category_counts?.[c.value] || 0})
+                    </Button>
+                  ))}
+                </div>
+                <div className="relative w-full sm:w-56">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#6C7A70]" strokeWidth={1.5} />
+                  <Input placeholder="Cari produk..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="pl-9 rounded-full border-[#E5E7E2] text-sm" data-testid="admin-search-input" />
+                </div>
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-[#F0F2ED]/50">
+                    <TableHead className="text-xs uppercase tracking-wider text-[#6C7A70] font-semibold">Produk</TableHead>
+                    <TableHead className="text-xs uppercase tracking-wider text-[#6C7A70] font-semibold">Kategori</TableHead>
+                    <TableHead className="text-xs uppercase tracking-wider text-[#6C7A70] font-semibold">Harga</TableHead>
+                    <TableHead className="text-xs uppercase tracking-wider text-[#6C7A70] font-semibold">Rating</TableHead>
+                    <TableHead className="text-xs uppercase tracking-wider text-[#6C7A70] font-semibold">Badge</TableHead>
+                    <TableHead className="text-xs uppercase tracking-wider text-[#6C7A70] font-semibold w-12"></TableHead>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
+                </TableHeader>
+                <TableBody>
+                  {filtered.length === 0 ? (
+                    <TableRow><TableCell colSpan={6} className="text-center py-12 text-[#6C7A70]" data-testid="no-admin-products">Tidak ada produk ditemukan</TableCell></TableRow>
+                  ) : (
+                    filtered.map(p => (
+                      <TableRow key={p.id} className="hover:bg-[#F0F2ED]/30" data-testid={`admin-product-row-${p.id}`}>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <img src={p.image_url} alt={p.title} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-[#1E2320] truncate max-w-[200px]">{p.title}</p>
+                              <p className="text-xs text-[#6C7A70] truncate max-w-[200px]">{p.description}</p>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell><Badge variant="outline" className="text-[10px] uppercase tracking-wider border-[#E5E7E2] text-[#6C7A70]">{categoryLabels[p.category] || p.category}</Badge></TableCell>
+                        <TableCell className="font-heading font-medium text-sm text-[#143D2E]">${p.price.toFixed(2)}</TableCell>
+                        <TableCell className="text-sm text-[#1E2320]">{p.rating} ({p.reviews_count})</TableCell>
+                        <TableCell>{p.badge ? <Badge className="bg-[#143D2E]/10 text-[#143D2E] text-[10px] uppercase">{p.badge}</Badge> : <span className="text-xs text-[#E5E7E2]">-</span>}</TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8" data-testid={`admin-product-menu-${p.id}`}><MoreVertical className="w-4 h-4 text-[#6C7A70]" /></Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => openEdit(p)} data-testid={`edit-product-${p.id}`}><Pencil className="w-3.5 h-3.5 mr-2" /> Edit</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => openDelete(p)} className="text-red-600 focus:text-red-600" data-testid={`delete-product-${p.id}`}><Trash2 className="w-3.5 h-3.5 mr-2" /> Hapus</DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
+
+          {/* Users Tab */}
+          <TabsContent value="users">
+            <div className="bg-white rounded-2xl border border-[#E5E7E2] shadow-sm overflow-hidden">
+              <div className="p-4 border-b border-[#E5E7E2] flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+                <p className="text-sm font-medium text-[#1E2320]">{users.length} pengguna terdaftar</p>
+                <div className="relative w-full sm:w-56">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#6C7A70]" strokeWidth={1.5} />
+                  <Input placeholder="Cari pengguna..." value={userSearch} onChange={e => setUserSearch(e.target.value)} className="pl-9 rounded-full border-[#E5E7E2] text-sm" data-testid="admin-user-search" />
+                </div>
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-[#F0F2ED]/50">
+                    <TableHead className="text-xs uppercase tracking-wider text-[#6C7A70] font-semibold">Pengguna</TableHead>
+                    <TableHead className="text-xs uppercase tracking-wider text-[#6C7A70] font-semibold">Role</TableHead>
+                    <TableHead className="text-xs uppercase tracking-wider text-[#6C7A70] font-semibold">Status</TableHead>
+                    <TableHead className="text-xs uppercase tracking-wider text-[#6C7A70] font-semibold">Bergabung</TableHead>
+                    <TableHead className="text-xs uppercase tracking-wider text-[#6C7A70] font-semibold w-12"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredUsers.length === 0 ? (
+                    <TableRow><TableCell colSpan={5} className="text-center py-12 text-[#6C7A70]">Tidak ada pengguna ditemukan</TableCell></TableRow>
+                  ) : (
+                    filteredUsers.map(u => {
+                      const isSelf = u._id === user?._id || u.email === user?.email;
+                      return (
+                        <TableRow key={u._id || u.email} className="hover:bg-[#F0F2ED]/30" data-testid={`admin-user-row-${u._id || u.email}`}>
+                          <TableCell>
+                            <div>
+                              <p className="text-sm font-medium text-[#1E2320]">{u.name || '-'} {isSelf && <span className="text-[10px] text-[#8FA998]">(Anda)</span>}</p>
+                              <p className="text-xs text-[#6C7A70]">{u.email}</p>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={`text-[10px] uppercase tracking-wider ${u.role === 'admin' ? 'bg-[#143D2E] text-white' : 'bg-[#F0F2ED] text-[#6C7A70]'}`}>
+                              {u.role === 'admin' ? 'Admin' : 'User'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {u.banned ? (
+                              <Badge variant="outline" className="text-[10px] uppercase tracking-wider border-red-200 text-red-600 bg-red-50">Nonaktif</Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-[10px] uppercase tracking-wider border-green-200 text-green-700 bg-green-50">Aktif</Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-xs text-[#6C7A70]">
+                            {u.created_at ? new Date(u.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}
+                          </TableCell>
+                          <TableCell>
+                            {!isSelf && (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8" data-testid={`admin-user-menu-${u._id}`}><MoreVertical className="w-4 h-4 text-[#6C7A70]" /></Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  {u.role === 'user' ? (
+                                    <DropdownMenuItem onClick={() => handleChangeRole(u._id, 'admin')} data-testid={`make-admin-${u._id}`}>
+                                      <Shield className="w-3.5 h-3.5 mr-2" /> Jadikan Admin
+                                    </DropdownMenuItem>
+                                  ) : (
+                                    <DropdownMenuItem onClick={() => handleChangeRole(u._id, 'user')} data-testid={`make-user-${u._id}`}>
+                                      <ShieldOff className="w-3.5 h-3.5 mr-2" /> Jadikan User
+                                    </DropdownMenuItem>
+                                  )}
+                                  {u.banned ? (
+                                    <DropdownMenuItem onClick={() => handleToggleBan(u._id, false)} data-testid={`unban-user-${u._id}`}>
+                                      <UserCheck className="w-3.5 h-3.5 mr-2" /> Aktifkan Kembali
+                                    </DropdownMenuItem>
+                                  ) : (
+                                    <DropdownMenuItem onClick={() => handleToggleBan(u._id, true)} className="text-red-600 focus:text-red-600" data-testid={`ban-user-${u._id}`}>
+                                      <Ban className="w-3.5 h-3.5 mr-2" /> Nonaktifkan
+                                    </DropdownMenuItem>
+                                  )}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
 
       <ProductFormDialog
