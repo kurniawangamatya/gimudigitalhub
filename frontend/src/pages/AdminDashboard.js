@@ -361,6 +361,13 @@ export default function AdminDashboard() {
             <h1 className="font-heading text-3xl tracking-tight font-medium text-[#1E2320]" data-testid="admin-title">Admin Dashboard</h1>
             <p className="text-base text-[#6C7A70] mt-1">Kelola produk dan pengguna Gimu Digital Hub</p>
           </div>
+          <Button 
+            variant="outline" 
+            className="rounded-full border-[#143D2E] text-[#143D2E] hover:bg-[#143D2E] hover:text-white"
+            onClick={() => navigate('/admin/theme')}
+          >
+            <Palette className="w-4 h-4 mr-2" /> Pengaturan Tampilan
+          </Button>
         </div>
 
         {/* Stats */}

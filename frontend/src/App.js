@@ -18,6 +18,7 @@ import ProfilePage from './pages/ProfilePage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import AdminDashboard from './pages/AdminDashboard';
+import ThemeSettingsPage from './pages/ThemeSettingsPage';
 
 function AppContent() {
   return (
@@ -40,6 +41,7 @@ function AppContent() {
               <Route path="/orders" element={<OrdersPage />} />
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/admin" element={<AdminDashboard />} />
+              <Route path="/admin/theme" element={<ThemeSettingsPage />} />
             </Routes>
             <Footer />
           </>
